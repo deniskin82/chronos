@@ -86,7 +86,7 @@ function chronos {(
 function chronos_download {
   if [[ -d chronos ]]
   then msg "Already downloaded Chronos."
-  else github_tgz airbnb/chronos "$chronos_ref" | tgz_into chronos
+  else github_tgz mesos/chronos "$chronos_ref" | tgz_into chronos
   fi
 }
 
@@ -100,7 +100,6 @@ function chronos_build {
 function chronos_runner {
 cat > "$prefix"/bin/chronos <<EOF
 export MESOS_NATIVE_LIBRARY='$prefix'/lib/libmesos.so
-default='$prefix'/chronos/config/local_scheduler_nozk.yml
 if [ "\$1" = "-h" ]
 then
 cat <<USAGE
@@ -108,8 +107,7 @@ cat <<USAGE
         chronos /path/to/config
 USAGE
 else
-  java -cp '$prefix'/chronos/target/chronos*.jar com.airbnb.scheduler.Main \
-       server "\${1:-\$default}"
+  java -cp '$prefix'/chronos/target/chronos*.jar org.apache.mesos.chronos.scheduler.Main"
 fi
 EOF
 chmod a+rx "$prefix"/bin/chronos

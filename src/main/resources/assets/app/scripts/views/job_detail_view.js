@@ -1,13 +1,12 @@
 /**
  * Job Detail View
- *
  */
 define([
   'jquery',
-  'backbone',
   'underscore',
   'views/job_detail_header_view',
   'views/job_detail_stats',
+  'views/job_detail_history',
   'views/bound_view',
   'components/tooltip_view',
   'components/fuzzy_select2',
@@ -15,17 +14,19 @@ define([
   'hbs!templates/job_persistence_error',
   'hbs!templates/job_persistence_success',
   'templates/helpers/join_with',
-  'bootstrap/tooltip',
-  'bootstrap/button',
   'bootstrap/alert',
+  'bootstrap/button',
+  'bootstrap/collapse',
+  'bootstrap/tooltip',
+  'bootstrap/transition',
   'jquery/pickadate',
   'bootstrap/timepicker'
 ],
 function($,
-         Backbone,
          _,
          JobDetailHeaderView,
          JobDetailStatsView,
+         JobDetailHistoryView,
          BoundView,
          TooltipView,
          FuzzySelect2,
@@ -33,11 +34,11 @@ function($,
          JobPersistenceErrorTpl,
          JobPersistenceSuccessTpl) {
 
-  var ListSeparator, JobDetailView, asyncExecutorPath, Remove;
+  'use strict';
 
-  ListSeparator = ', ';
+  var JobDetailView, Remove;
 
-  asyncExecutorPath = '/srv/mesos/utils/async-executor.arx';
+  var LIST_SEPARATOR = ', ';
 
   Remove = BoundView.prototype.remove;
 
@@ -96,6 +97,7 @@ function($,
 
       this.addRivets();
       this.addTooltips();
+      this.$('.collapse').collapse();
     },
 
     remove: function() {
@@ -111,13 +113,17 @@ function($,
     },
 
     render: function() {
-      var html = this.template(this.model.toData());
+      var data = this.model.toData();
+      data.cid = this.model.cid;
+
+      var html = this.template(data);
       this.$el.html(html);
 
       this.addRivets();
       this.renderHeader();
       this.renderParents();
       this.renderStats();
+      this.renderJobHistory();
       this.trigger('render');
 
       if (this.$el.hasClass('edit-job')) {
@@ -166,11 +172,11 @@ function($,
       var view = this.statsView;
       if (!view) {
         try {
-        view = new JobDetailStatsView({
-          model: this.model
-        });
+          view = new JobDetailStatsView({
+            model: this.model
+          });
 
-        this.statsView = view;
+          this.statsView = view;
         } catch (e) {
         }
       }
@@ -178,10 +184,26 @@ function($,
       return view.setElement(this.$('.stats-row')).render();
     },
 
+    renderJobHistory: function() {
+      var view = this.jobHistoryView;
+      if (!view) {
+        try {
+          view = new JobDetailHistoryView({
+            model: this.model
+          });
+
+          this.jobHistoryView = view;
+        } catch (e) {
+        }
+      }
+      if (!view) { return; }
+      return view.setElement(this.$('.history-row')).render();
+    },
+
     renderParents: function() {
       if (this.model.get('parents').length) {
         var $parentsWrapper = this.$el.find('.parents-wrapper'),
-            parentsList     = this.model.get('parents').join(ListSeparator);
+            parentsList     = this.model.get('parents').join(LIST_SEPARATOR);
 
         this.model.set('parentsList', parentsList);
         $parentsWrapper.find('.parents').html(parentsList);
@@ -191,7 +213,6 @@ function($,
     },
 
     renderDisplayName: function() {
-      console.log('renderDisplayName')
       this.$el.find('.toggleName').html(this.model.get('name'));
     },
 
@@ -269,9 +290,9 @@ function($,
     },
 
     highlightValidationError: function(error, errorName) {
-      console.log('highlightValidationError', error, errorName);
       var $form = this.$('form'),
-          $el;
+          $el,
+          $parent;
 
       if (_.isArray(error) && (error.length === 1)) {
         error = error[0];
@@ -284,9 +305,9 @@ function($,
         $parent = $el.parents('.control-group').first().addClass('error');
 
         if (error !== true) {
-          $parent.find('.help-inline').text(error);
+          $parent.find('.help-inline').text(error).removeClass('hide');
         }
-      };
+      }
     },
 
     createError: function(model, jqXhr, options) {
@@ -306,8 +327,8 @@ function($,
     persistenceSuccess: function(model, verb) {
       var data = {
         jobName: model.get('name'),
-        create: !!(verb === 'create'),
-        save:   !!(verb === 'save')
+        create: (verb === 'create'),
+        save: (verb === 'save')
       };
 
       this.disableEdit();
@@ -324,7 +345,7 @@ function($,
     },
 
     renderMessage: function(classes, tpl, data) {
-      var c, $el, name, text;
+      var c, $el, name;
       data || (data = {});
 
       c = (['alert', classes]).join('-');
@@ -335,8 +356,8 @@ function($,
         jobName: name,
         alertClass: c
       }))).find('.alert').alert().on('closed', function() {
-          $el.hide();
-          $el.parents('form').find('.control-group.error').removeClass('error');
+        $el.hide();
+        $el.parents('form').find('.control-group.error').removeClass('error');
       });
     },
 
@@ -351,20 +372,26 @@ function($,
 
         console.log(name, val);
 
-        if (name == 'async') {
+        if (name === 'async') {
           if (!$el.is(':checked')) { return; }
 
-          val = !(parseInt(val, 10) === 0);
-        } else if (name == 'parents') {
+          val = (parseInt(val, 10) !== 0);
+        } else if (name === 'parents') {
           val = val.split(',');
           val = _.map(val, function(v) {
             return v.trim();
           });
-          if (val[0] == '') val = [];
-        } else if (name == 'disabled') {
+          if (val[0] === '') { val = []; }
+        } else if (name === 'disabled') {
           if (!$el.is(':checked')) { return; }
 
           val = (parseInt(val, 10) === 0);
+        } else if (name === 'softError') {
+            if (!$el.is(':checked')) { return; }
+
+            val = (parseInt(val, 10) !== 0);
+        } else if (name === 'highPriority') {
+          if (!$el.is(':checked')) { return; }
         }
 
         console.log("setting model", model, "name", name, "to", val);
@@ -377,7 +404,7 @@ function($,
 
     dispose: function() {
       this.off();
-      $('.right-pane').html('')
+      $('.right-pane').html('');
     },
 
     '$parents': function() {
@@ -495,8 +522,7 @@ function($,
     },
 
     cancel: function(event) {
-      var newJob = this.$el.hasClass('create-job'),
-          data   = this._remember;
+      var data = this._remember;
       event && event.preventDefault();
 
       this.disableEdit();
@@ -507,8 +533,6 @@ function($,
 
     close: function() {
       var mCid = this.model.cid;
-
-      console.log("Close", arguments, this, this.$el);
 
       if (this.model.isNew()) {
         app.detailsCollection.remove(mCid, {create: true});
@@ -521,7 +545,6 @@ function($,
     },
 
     blur: function(event) {
-      var $target = $(event.target);
       var newVal = $(event.currentTarget).val(),
           name = $(event.currentTarget).attr('name');
 
@@ -529,14 +552,8 @@ function($,
       this.model.set(name, ''+newVal);
     },
 
-    setAsync: function(e) {
-      e && e.preventDefault();
-      //this.$('input[name="executor"]').val(asyncExecutorPath);
-    },
-
     validate: function(e) {
       e && e.preventDefault();
-      var isValid = this.model.isValid();
       var validation = this.model.validate(this.model.attributes);
 
       $(e.target).css({

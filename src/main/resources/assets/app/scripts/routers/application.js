@@ -1,29 +1,26 @@
 /**
  * Application Router
- *
  */
 define([
-         'jquery',
-         'backbone',
-         'underscore',
-         'views/application_view',
-         'views/jobs_collection_view',
-         'views/job_detail_collection_view',
-         'views/main_menu',
-         'views/graphbox_view'
-       ],
-       function($,
-                Backbone,
-                _,
-                ApplicationView,
-                JobsCollectionView,
-                JobDetailCollectionView,
-                MainMenuView,
-                GraphboxView) {
+  'jquery',
+  'backbone',
+  'underscore',
+  'views/application_view',
+  'views/jobs_collection_view',
+  'views/job_detail_collection_view',
+  'views/main_menu',
+  'views/graphbox_view'
+],
+function($,
+        Backbone,
+        _,
+        ApplicationView,
+        JobsCollectionView,
+        JobDetailCollectionView,
+        MainMenuView,
+        GraphboxView) {
 
-  var ApplicationRouter;
-
-  ApplicationRouter = Backbone.Router.extend({
+  var ApplicationRouter = Backbone.Router.extend({
     routes: {
       ''           : 'index',
       'jobs/*path' : 'showJob'
@@ -52,6 +49,11 @@ define([
 
       window.app.lightbox = new GraphboxView();
       window.app.resultsCollection.trigger('reset');
+
+      window.app.jobsCollectionView.$el.tooltip({
+        container: window.app.applicationView.$el,
+        selector: '[data-toggle="tooltip"]'
+      });
     },
 
     navigateJob: function(jobName) {
@@ -60,7 +62,6 @@ define([
 
     index: function() {
       app.detailsCollection.reset();
-      app.resultsCollection.reset(app.jobsCollection.models);
     },
 
     showJob: function(path) {

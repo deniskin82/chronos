@@ -8,8 +8,7 @@ declare -r build_dir="$source_dir/build"
 declare -r install_dir="$service_dir/install"
 declare -r branch_name="snapshot"
 
-# This is the git revision of ~ 0.12.0 with the state abstraction which we use.
-declare -r git_revision=3758114ee4492dcbb784d5aac65d43ac54ddb439
+declare -r git_revision=dd89ea359ec55fbc90b5718d9cdbf021f189c2fa
 
 function all {
   echo "Updating mesos source..."
@@ -22,7 +21,7 @@ function all {
     fi
     popd
   else
-    git clone https://github.com/apache/incubator-mesos.git $source_dir
+    git clone https://github.com/apache/mesos.git $source_dir
     (cd $source_dir
       git checkout $git_revision -b $branch_name
     )

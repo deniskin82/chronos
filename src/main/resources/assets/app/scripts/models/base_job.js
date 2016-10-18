@@ -1,14 +1,16 @@
 /**
  * Base Job Model
- *
  */
 define([
+  'jquery',
   'backbone',
   'underscore',
   'moment',
   'validations/base_job'
 ],
-function(Backbone, _, moment, BaseJobValidations) {
+function($, Backbone, _, moment, BaseJobValidations) {
+
+  'use strict';
 
   var slice = Array.prototype.slice,
       BaseWhiteList,
@@ -19,12 +21,12 @@ function(Backbone, _, moment, BaseJobValidations) {
         encoded;
 
     encoded = _.map(args, function(arg) { return encodeURIComponent(arg); });
-    encoded.unshift('');
     return encoded.join('/');
   }
 
   BaseWhiteList = [
-    'name', 'command', 'owner', 'async', 'epsilon', 'executor', 'disabled'
+    'name', 'command', 'description', 'owner', 'ownerName', 'async', 'epsilon', 'executor',
+    'disabled', 'softError', 'cpus', 'mem', 'disk', 'highPriority'
   ];
 
   BaseJobModel = Backbone.Model.extend({
@@ -33,22 +35,23 @@ function(Backbone, _, moment, BaseJobValidations) {
       return {
         name: '-',
         owner: '',
-        startTime: moment(d).format('HH:mm:ss'),
-        startDate: moment(d).format('YYYY-MM-DD'),
+        startTime: moment.utc(d).format('HH:mm:ss'),
+        startDate: moment.utc(d).format('YYYY-MM-DD'),
         repeats: '',
         duration: 'T24H',
-        epsilon: 'PT15M',
+        epsilon: 'PT30M',
         command: '-',
         schedule: '-',
         parents: [],
         retries: 2,
-        lastSuccess: '-',
-        lastError: '-',
+        lastSuccess: null,
+        lastError: null,
         successCount: 0,
         errorCount: 0,
         persisted: false,
         async: false,
-        disabled: false
+        disabled: false,
+        softError: false
       };
     },
 
@@ -88,20 +91,18 @@ function(Backbone, _, moment, BaseJobValidations) {
       var formatStats = function(stats) {
         return _.reduce(stats, function(memo, v, k) {
           var key = k;
-          /*
-          if (k.toLocaleLowerCase().indexOf('percentile') >= 0) {
-            key = [
-              k.split('th')[0], 'th', ' Percentile'
-            ].join('');
-          }
-          */
           memo[key] = v;
           return memo;
         }, {});
       };
       $.getJSON(url, function(data) {
-        if (!data || !data.count) { return null; }
-        model.set({stats: formatStats(data)});
+        if (!data) { return null; }
+        if (data.histogram && data.histogram.count) {
+          model.set({stats: formatStats(data.histogram)});
+        }
+        if (data.taskStatHistory) {
+          model.set({taskStatHistory: data.taskStatHistory});
+        }
       });
     },
 
@@ -127,29 +128,24 @@ function(Backbone, _, moment, BaseJobValidations) {
       this.set({schedule: schedule}, {silent: true});
     },
 
-    validate: function(attributes, options) {
-      return "cannot validate base jobs";
-    },
-
     run: function(options) {
       return this.sync('run', this, options);
     },
 
     sync: function(method, model, options) {
-      var _options,
-          syncUrl,
+      var syncUrl,
           _method = method;
 
       if (method === 'run') { _method = 'update'; }
       switch (method) {
-        case 'delete':
-        case 'run':
-          syncUrl = this.url('put');
-          options.data = null;
-          break;
-        default:
-          syncUrl = this.url();
-          break;
+      case 'delete':
+      case 'run':
+        syncUrl = this.url('put');
+        options.data = null;
+        break;
+      default:
+        syncUrl = this.url();
+        break;
       }
 
       return Backbone.sync.apply(this, [
@@ -189,6 +185,7 @@ function(Backbone, _, moment, BaseJobValidations) {
       var data = Backbone.Model.prototype.toJSON.call(this);
 
       return _.extend({}, data, {
+        cid: this.cid,
         parentsList: this.get('parents').join(', '),
         isNew: this.isNew(),
         hasSchedule: this.hasSchedule(),
@@ -197,16 +194,28 @@ function(Backbone, _, moment, BaseJobValidations) {
       });
     },
 
-    updateLastRunInfo: function(model, lastRunStatus, options) {
+    updateLastRunInfo: function(model, lastRunStatus) {
       var lastRunFailed  = (lastRunStatus === 'failure'),
           lastRunFresh   = (lastRunStatus === 'fresh'),
           lastRunSuccess = (lastRunStatus === 'success');
 
+      var lastRunDescr, lastRunTime;
+      if (lastRunFailed) {
+        lastRunTime = model.get('lastError');
+        lastRunDescr = 'Last run @ ' + lastRunTime + ' failed.';
+      } else if (lastRunSuccess) {
+        lastRunTime = model.get('lastSuccess');
+        lastRunDescr = 'Last run @ ' + lastRunTime + ' was successful.';
+      } else {
+        lastRunDescr = 'Job has not run yet.';
+      }
+
       model.set({
-        lastRunSuccess: !!lastRunSuccess,
-        lastRunError: !!lastRunFailed,
-        lastRunFresh: !!lastRunFresh,
-        lastRunTime: model.get((lastRunFailed ? 'lastError' : 'lastSuccess'))
+        lastRunDescr: lastRunDescr,
+        lastRunSuccess: lastRunSuccess,
+        lastRunError: lastRunFailed,
+        lastRunFresh: lastRunFresh,
+        lastRunTime: lastRunTime
       });
     },
 
